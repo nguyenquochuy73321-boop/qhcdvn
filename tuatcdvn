@@ -71,7 +71,7 @@ pcall(function()
 end)
 
 local Window = Fluent:CreateWindow({
-    Title = "TKZ",
+    Title = "QHZ",
     SubTitle = "By Qhuy",
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 460),
@@ -93,7 +93,7 @@ local Tabs = {
 -- ================= MỤC 1: MAIN =================
 Tabs.Main:AddParagraph({
     Title = "Thông tin",
-    Content = "Menu này được tạo bởi nguyễn quốc huy"
+    Content = "Menu này dành cho game óc cặc nhé hihi"
 })
 
 -- ================= HÀM DÙNG CHUNG & BIẾN GLOBAL =================
