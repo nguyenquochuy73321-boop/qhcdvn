@@ -1,1 +1,1243 @@
+-- ===================================================
+-- BẢO VỆ & AN TOÀN TRONG MÔI TRƯỜNG TESTING / STUDIO / EXECUTORS
+-- ===================================================
+repeat task.wait() until game:IsLoaded()
 
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+while not LocalPlayer do
+    task.wait(0.1)
+    LocalPlayer = Players.LocalPlayer
+end
+
+-- Tối ưu hóa khả năng tương thích đa nền tảng (PC & Mobile Executors)
+local function GetSafeGuiParent()
+    local success, hui = pcall(function() 
+        if gethui then return gethui() end
+    end)
+    if success and hui then return hui end
+    
+    local successCore, coreGui = pcall(function() return game:GetService("CoreGui") end)
+    if successCore and coreGui then
+        local checkAccess = pcall(function() local _ = coreGui.Name end)
+        if checkAccess then return coreGui end
+    end
+    
+    return LocalPlayer:WaitForChild("PlayerGui", 5)
+end
+
+-- Dynamic HttpGet cho mọi Executor Mobile & PC
+local function CustomHttpGet(url)
+    if syn and syn.request then
+        local res = syn.request({Url = url, Method = "GET"})
+        return res.Body
+    elseif http and http.request then
+        local res = http.request({Url = url, Method = "GET"})
+        return res.Body
+    elseif request then
+        local res = request({Url = url, Method = "GET"})
+        return res.Body
+    else
+        return game:HttpGet(url)
+    end
+end
+
+-- ===================================================
+-- LOAD THƯ VIỆN FLUENT UI
+-- ===================================================
+local Fluent = nil
+local Urls = {
+    "https://raw.githubusercontent.com/dawid-scripts/Fluent/master/main.lua",
+    "https://cdn.jsdelivr.net/gh/dawid-scripts/Fluent@master/main.lua",
+    "https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"
+}
+
+for _, url in ipairs(Urls) do
+    local success, result = pcall(function()
+        return loadstring(CustomHttpGet(url))()
+    end)
+    if success and type(result) == "table" then
+        Fluent = result
+        break
+    end
+end
+
+if not Fluent then return end
+
+pcall(function()
+    if Fluent.GuiHolder then
+        Fluent.GuiHolder.Parent = GetSafeGuiParent()
+    end
+end)
+
+local Window = Fluent:CreateWindow({
+    Title = "TKZ",
+    SubTitle = "By Qhuy",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 460),
+    Acrylic = false,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+local Tabs = {
+    Main = Window:AddTab({ Title = "Main", Icon = "home" }),
+    FarmLevel = Window:AddTab({ Title = "Farm Level", Icon = "sword" }),
+    FarmBoss = Window:AddTab({ Title = "Farm Boss", Icon = "skull" }),
+    FarmTien = Window:AddTab({ Title = "Farm Tiền", Icon = "coins" }),
+    PVP = Window:AddTab({ Title = "PVP Combat", Icon = "crosshair" }),
+    FixLag = Window:AddTab({ Title = "Fix Lag", Icon = "zap" }),
+    Settings = Window:AddTab({ Title = "Setting", Icon = "settings" })
+}
+
+-- ================= MỤC 1: MAIN =================
+Tabs.Main:AddParagraph({
+    Title = "Thông tin",
+    Content = "Menu này được tạo bởi nguyễn quốc huy"
+})
+
+-- ================= HÀM DÙNG CHUNG & BIẾN GLOBAL =================
+local VirtualUser = game:GetService("VirtualUser")
+local RunService = game:GetService("RunService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local HttpService = game:GetService("HttpService")
+local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
+
+_G.FarmDistance = 4
+_G.DashSpeed = 16
+_G.AutoFarmNPC = false
+_G.AutoLoot = false
+_G.AutoFarmChua = false
+_G.AntiAFK = false
+
+-- Biến Cấu Hình Farm Boss Tùy Chỉnh Tự Do
+_G.AutoFarmBoss = false
+_G.BossFarmDistance = 50  
+_G.BossFarmHeight = 0      
+_G.BossFarmSpeed = 15      
+_G.AutoLootBossChest = false
+_G.AimBossCam = false
+_G.ShowBossHealthUI = false
+_G.SpinCameraBoss = false
+
+-- Biến Anti-Kick Boss Attack
+_G.BossReachDamage = true
+
+-- Biến Farm Tiền
+_G.AutoFarmBanhMi = false
+_G.AutoFarmBenhVien = false
+_G.AutoFarmCaoSu = false
+_G.AutoFarmChotCongAn = false
+
+_G.FarmBanhMiPos = nil
+_G.FarmBenhVienPos = nil
+_G.FarmCaoSuPos = nil
+_G.FarmChotCongAnPos = nil
+
+-- Biến PVP Combat
+_G.AimPlayer = false
+_G.PVPAutoAttack = false
+_G.AttackToolName = ""
+_G.AutoHeal = false
+_G.HealSlot = 1
+_G.HealHealthPercent = 85
+_G.AutoBuyBangGac = false
+_G.BuyAmountBangGac = 1
+_G.PlayerHitbox = false
+_G.PlayerHitboxSize = 50
+_G.PlayerHitboxTransparency = 0.5
+_G.ESPPlayerHealth = false
+_G.HighSpeedSpin = false
+_G.SuperSpeed = false
+_G.SuperSpeedValue = 50
+_G.SuperJump = false
+_G.SuperJumpValue = 100
+
+-- SAVE / LOAD CONFIG
+local ConfigFolder = "TKZ_Config"
+local ConfigFile = ConfigFolder .. "/FarmConfig.json"
+
+local function SavePositionsToConfig()
+    pcall(function()
+        if writefile and isfolder then
+            if not isfolder(ConfigFolder) then makefolder(ConfigFolder) end
+            local dataToSave = {}
+            if _G.FarmBanhMiPos then dataToSave.FarmBanhMiPos = {_G.FarmBanhMiPos.X, _G.FarmBanhMiPos.Y, _G.FarmBanhMiPos.Z} end
+            if _G.FarmBenhVienPos then dataToSave.FarmBenhVienPos = {_G.FarmBenhVienPos.X, _G.FarmBenhVienPos.Y, _G.FarmBenhVienPos.Z} end
+            if _G.FarmCaoSuPos then dataToSave.FarmCaoSuPos = {_G.FarmCaoSuPos.X, _G.FarmCaoSuPos.Y, _G.FarmCaoSuPos.Z} end
+            if _G.FarmChotCongAnPos then dataToSave.FarmChotCongAnPos = {_G.FarmChotCongAnPos.X, _G.FarmChotCongAnPos.Y, _G.FarmChotCongAnPos.Z} end
+            writefile(ConfigFile, HttpService:JSONEncode(dataToSave))
+        end
+    end)
+end
+
+local function LoadPositionsFromConfig()
+    pcall(function()
+        if isfile and readfile and isfile(ConfigFile) then
+            local success, result = pcall(function() return HttpService:JSONDecode(readfile(ConfigFile)) end)
+            if success and type(result) == "table" then
+                if result.FarmBanhMiPos then _G.FarmBanhMiPos = Vector3.new(unpack(result.FarmBanhMiPos)) end
+                if result.FarmBenhVienPos then _G.FarmBenhVienPos = Vector3.new(unpack(result.FarmBenhVienPos)) end
+                if result.FarmCaoSuPos then _G.FarmCaoSuPos = Vector3.new(unpack(result.FarmCaoSuPos)) end
+                if result.FarmChotCongAnPos then _G.FarmChotCongAnPos = Vector3.new(unpack(result.FarmChotCongAnPos)) end
+            end
+        end
+    end)
+end
+
+LoadPositionsFromConfig()
+
+local function GetClosestEnemy()
+    local ClosestEnemy = nil
+    local MaxDistance = 2000
+
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local MyPos = LocalPlayer.Character.HumanoidRootPart.Position
+
+        for _, v in pairs(Workspace:GetDescendants()) do
+            if v:IsA("Model") and v:FindFirstChildOfClass("Humanoid") and v:FindFirstChild("HumanoidRootPart") then
+                local hum = v:FindFirstChildOfClass("Humanoid")
+                if hum.Health > 0 and v.Name ~= LocalPlayer.Name and not Players:GetPlayerFromCharacter(v) then
+                    if v.Name == "CityNPC" then
+                        local Distance = (MyPos - v.HumanoidRootPart.Position).Magnitude
+                        if Distance < MaxDistance then
+                            MaxDistance = Distance
+                            ClosestEnemy = v
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return ClosestEnemy
+end
+
+local function GetClosestPlayer()
+    local ClosestPlayer = nil
+    local MaxDistance = 1000
+
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local MyPos = LocalPlayer.Character.HumanoidRootPart.Position
+        for _, plr in pairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") and plr.Character:FindFirstChildOfClass("Humanoid") then
+                if plr.Character:FindFirstChildOfClass("Humanoid").Health > 0 then
+                    local dist = (MyPos - plr.Character.HumanoidRootPart.Position).Magnitude
+                    if dist < MaxDistance then
+                        MaxDistance = dist
+                        ClosestPlayer = plr
+                    end
+                end
+            end
+        end
+    end
+    return ClosestPlayer
+end
+
+local function GetBossNPC2()
+    for _, v in pairs(Workspace:GetDescendants()) do
+        if v:IsA("Model") and v.Name == "NPC2" and v:FindFirstChild("HumanoidRootPart") and v:FindFirstChildOfClass("Humanoid") then
+            if v:FindFirstChildOfClass("Humanoid").Health > 0 then
+                return v
+            end
+        end
+    end
+    return nil
+end
+
+local function GetAndSaveChairPosition(saveKey)
+    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        local MyPos = LocalPlayer.Character.HumanoidRootPart.Position
+        local ClosestPos = nil
+        local MinDistance = 20
+
+        for _, v in pairs(Workspace:GetDescendants()) do
+            if v:IsA("ProximityPrompt") then
+                local Parent = v.Parent
+                local PromptPos = nil
+
+                if Parent:IsA("BasePart") then PromptPos = Parent.Position
+                elseif Parent:IsA("Model") then
+                    if Parent.PrimaryPart then PromptPos = Parent.PrimaryPart.Position
+                    else
+                        local Part = Parent:FindFirstChildOfClass("BasePart")
+                        if Part then PromptPos = Part.Position end
+                    end
+                end
+
+                if PromptPos then
+                    local Distance = (MyPos - PromptPos).Magnitude
+                    if Distance < MinDistance then
+                        MinDistance = Distance
+                        ClosestPos = PromptPos
+                    end
+                end
+            end
+        end
+
+        if ClosestPos then
+            _G[saveKey] = ClosestPos
+            SavePositionsToConfig()
+            return ClosestPos
+        end
+    end
+    return nil
+end
+
+local function FarmAtSavedPosition(savedPos)
+    pcall(function()
+        if not savedPos then return end
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            LocalPlayer.Character.HumanoidRootPart.Velocity = Vector3.new(0, 0, 0)
+            LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(savedPos + Vector3.new(0, 1.5, 0))
+            
+            for _, prompt in pairs(Workspace:GetDescendants()) do
+                if prompt:IsA("ProximityPrompt") and prompt.Enabled then
+                    local ParentPart = prompt.Parent
+                    local PromptPos = nil
+                    
+                    if ParentPart:IsA("BasePart") then PromptPos = ParentPart.Position
+                    elseif ParentPart:IsA("Model") then
+                        if ParentPart.PrimaryPart then PromptPos = ParentPart.PrimaryPart.Position
+                        else
+                            local Part = ParentPart:FindFirstChildOfClass("BasePart")
+                            if Part then PromptPos = Part.Position end
+                        end
+                    end
+                    
+                    if PromptPos and (PromptPos - savedPos).Magnitude <= 10 then
+                        fireproximityprompt(prompt)
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- TỐI ƯU HÀM TỰ ĐỘNG ĐÁNH GÂY DAMAGE AN TOÀN KHÔNG BỊ KICK
+local function AutoAttack(targetBoss)
+    pcall(function()
+        local toolName = _G.AttackToolName
+        local char = LocalPlayer.Character
+        local backpack = LocalPlayer:FindFirstChild("Backpack")
+
+        if char and backpack then
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            
+            if toolName and toolName ~= "" then
+                local tool = backpack:FindFirstChild(toolName)
+                if tool and hum then
+                    hum:EquipTool(tool)
+                end
+            else
+                if not char:FindFirstChildOfClass("Tool") then
+                    local tool = backpack:FindFirstChildOfClass("Tool")
+                    if tool and hum then hum:EquipTool(tool) end
+                end
+            end
+        end
+
+        local EquippedTool = char and char:FindFirstChildOfClass("Tool")
+        if EquippedTool then 
+            if targetBoss and targetBoss:FindFirstChild("HumanoidRootPart") then
+                local handle = EquippedTool:FindFirstChild("Handle") or EquippedTool:FindFirstChildOfClass("BasePart")
+                if handle and firetouchinterest then
+                    firetouchinterest(handle, targetBoss.HumanoidRootPart, 0)
+                    firetouchinterest(handle, targetBoss.HumanoidRootPart, 1)
+                end
+            end
+            EquippedTool:Activate() 
+        end
+        
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+    end)
+end
+
+RunService.Stepped:Connect(function()
+    if (_G.AutoFarmNPC or _G.AutoFarmBoss or _G.AutoFarmBanhMi or _G.AutoFarmBenhVien or _G.AutoFarmCaoSu or _G.AutoFarmChotCongAn) and LocalPlayer.Character then
+        for _, part in pairs(LocalPlayer.Character:GetChildren()) do
+            if part:IsA("BasePart") then part.CanCollide = false end
+        end
+    end
+
+    -- LOGIC HITBOX PLAYER
+    pcall(function()
+        for _, plr in pairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                local hrp = plr.Character.HumanoidRootPart
+                if _G.PlayerHitbox then
+                    local sz = tonumber(_G.PlayerHitboxSize) or 50
+                    local trans = tonumber(_G.PlayerHitboxTransparency) or 0.5
+                    hrp.Size = Vector3.new(sz, sz, sz)
+                    hrp.Transparency = trans
+                    hrp.Color = Color3.fromRGB(255, 100, 0)
+                    hrp.Material = Enum.Material.Forcefield
+                    hrp.CanCollide = false
+                else
+                    hrp.Size = Vector3.new(2, 2, 1)
+                    hrp.Transparency = 1
+                end
+            end
+        end
+    end)
+
+    -- SIÊU TỐC ĐỘ CHẠY & NHẢY CAO
+    pcall(function()
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+            local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+            if _G.SuperSpeed then
+                hum.WalkSpeed = tonumber(_G.SuperSpeedValue) or 50
+            end
+            if _G.SuperJump then
+                hum.UseJumpPower = true
+                hum.JumpPower = tonumber(_G.SuperJumpValue) or 100
+            end
+        end
+    end)
+end)
+
+-- ================= TẠO BẢNG MÁU BOSS UI =================
+local BossHealthGui = Instance.new("ScreenGui")
+BossHealthGui.Name = "BossHealthGui_TKZ"
+BossHealthGui.ResetOnSpawn = false
+BossHealthGui.Parent = GetSafeGuiParent()
+
+local MainFrame = Instance.new("Frame", BossHealthGui)
+MainFrame.Size = UDim2.new(0, 340, 0, 75)
+MainFrame.Position = UDim2.new(0.5, -170, 0.08, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
+MainFrame.BorderSizePixel = 0
+MainFrame.Visible = false
+
+local UICorner = Instance.new("UICorner", MainFrame)
+UICorner.CornerRadius = UDim.new(0, 10)
+
+local UIStroke = Instance.new("UIStroke", MainFrame)
+UIStroke.Color = Color3.fromRGB(255, 60, 60)
+UIStroke.Thickness = 2
+
+local BossNameLabel = Instance.new("TextLabel", MainFrame)
+BossNameLabel.Size = UDim2.new(1, -20, 0, 25)
+BossNameLabel.Position = UDim2.new(0, 10, 0, 5)
+BossNameLabel.BackgroundTransparency = 1
+BossNameLabel.Text = "BOSS: NPC2"
+BossNameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+BossNameLabel.TextSize = 16
+BossNameLabel.Font = Enum.Font.GothamBold
+BossNameLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local HealthBarBg = Instance.new("Frame", MainFrame)
+HealthBarBg.Size = UDim2.new(1, -20, 0, 18)
+HealthBarBg.Position = UDim2.new(0, 10, 0, 32)
+HealthBarBg.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+HealthBarBg.BorderSizePixel = 0
+
+local HealthBarCorner = Instance.new("UICorner", HealthBarBg)
+HealthBarCorner.CornerRadius = UDim.new(0, 6)
+
+local HealthBarFill = Instance.new("Frame", HealthBarBg)
+HealthBarFill.Size = UDim2.new(1, 0, 1, 0)
+HealthBarFill.BackgroundColor3 = Color3.fromRGB(255, 45, 85)
+HealthBarFill.BorderSizePixel = 0
+
+local FillCorner = Instance.new("UICorner", HealthBarFill)
+FillCorner.CornerRadius = UDim.new(0, 6)
+
+local HealthText = Instance.new("TextLabel", HealthBarBg)
+HealthText.Size = UDim2.new(1, 0, 1, 0)
+HealthText.BackgroundTransparency = 1
+HealthText.Text = "100 / 100"
+HealthText.TextColor3 = Color3.fromRGB(255, 255, 255)
+HealthText.TextSize = 12
+HealthText.Font = Enum.Font.GothamMedium
+
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+        if _G.ShowBossHealthUI then
+            local boss = GetBossNPC2()
+            if boss and boss:FindFirstChildOfClass("Humanoid") then
+                local hum = boss:FindFirstChildOfClass("Humanoid")
+                MainFrame.Visible = true
+                BossNameLabel.Text = "👑 BOSS: " .. boss.Name
+                local hpPercent = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
+                
+                TweenService:Create(HealthBarFill, TweenInfo.new(0.2), {Size = UDim2.new(hpPercent, 0, 1, 0)}):Play()
+                HealthText.Text = string.format("%d / %d (%d%%)", math.floor(hum.Health), math.floor(hum.MaxHealth), math.floor(hpPercent * 100))
+            else
+                MainFrame.Visible = false
+            end
+        else
+            MainFrame.Visible = false
+        end
+    end
+end)
+
+-- CAMERA XOAY XUNG QUANH BOSS
+local camAngle = 0
+RunService.RenderStepped:Connect(function()
+    if _G.SpinCameraBoss then
+        local boss = GetBossNPC2()
+        if boss and boss:FindFirstChild("HumanoidRootPart") then
+            camAngle = (camAngle + 1.5) % 360
+            local bossPos = boss.HumanoidRootPart.Position
+            local radius = 18
+            local heightOffset = 15
+            
+            local offset = Vector3.new(math.cos(math.rad(camAngle)) * radius, heightOffset, math.sin(math.rad(camAngle)) * radius)
+            Workspace.CurrentCamera.CFrame = CFrame.new(bossPos + offset, bossPos)
+        end
+    end
+end)
+
+-- ================= MỤC 2: FARM LEVEL =================
+local FarmSection = Tabs.FarmLevel:AddSection("Cấu hình & Chức năng Farm")
+
+local AutoFarmToggle = FarmSection:AddToggle("AutoFarmNpc", { Title = "Auto Farm CityNPC", Default = false })
+AutoFarmToggle:OnChanged(function(Value)
+    _G.AutoFarmNPC = Value
+    if Value then
+        task.spawn(function()
+            while _G.AutoFarmNPC do
+                pcall(function()
+                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                        local TargetNPC = GetClosestEnemy()
+                        if TargetNPC and TargetNPC:FindFirstChild("HumanoidRootPart") and TargetNPC:FindFirstChildOfClass("Humanoid").Health > 0 then
+                            LocalPlayer.Character.HumanoidRootPart.Velocity = Vector3.new(0, 0, 0)
+                            local EnemyHRP = TargetNPC.HumanoidRootPart
+                            local TargetCFrame = EnemyHRP.CFrame * CFrame.new(0, 0, _G.FarmDistance)
+                            LocalPlayer.Character.HumanoidRootPart.CFrame = CFrame.new(TargetCFrame.Position, EnemyHRP.Position)
+                            AutoAttack()
+                        end
+                    end
+                end)
+                task.wait(0.02)
+            end
+        end)
+    end
+end)
+
+FarmSection:AddSlider("DistanceSlider", {
+    Title = "Khoảng cách Farm", Description = "Khoảng cách đứng so với NPC",
+    Default = 4, Min = 1, Max = 15, Rounding = 0,
+    Callback = function(Value) _G.FarmDistance = Value end
+})
+
+FarmSection:AddSlider("DashSpeedSlider", {
+    Title = "Tốc Độ Dash (WalkSpeed)", Description = "Thay đổi tốc độ di chuyển của nhân vật",
+    Default = 16, Min = 16, Max = 100, Rounding = 0,
+    Callback = function(Value)
+        _G.DashSpeed = Value
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+            LocalPlayer.Character.Humanoid.WalkSpeed = Value
+        end
+    end
+})
+
+local AutoLootToggle = FarmSection:AddToggle("AutoLoot", { Title = "Auto Nhặt Đồ (Loot tiền giữ F)", Default = false })
+AutoLootToggle:OnChanged(function(Value)
+    _G.AutoLoot = Value
+    if Value then
+        task.spawn(function()
+            while _G.AutoLoot do
+                pcall(function()
+                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                        local MyPos = LocalPlayer.Character.HumanoidRootPart.Position
+                        for _, v in pairs(Workspace:GetDescendants()) do
+                            if v:IsA("ProximityPrompt") and v.Enabled then
+                                local ParentPart = v.Parent
+                                local PromptPos = nil
+                                if ParentPart:IsA("BasePart") then PromptPos = ParentPart.Position
+                                elseif ParentPart:IsA("Model") and ParentPart.PrimaryPart then PromptPos = ParentPart.PrimaryPart.Position end
+                                
+                                if PromptPos and (MyPos - PromptPos).Magnitude <= 30 then
+                                    fireproximityprompt(v)
+                                end
+                            end
+                        end
+                    end
+                end)
+                task.wait(0.1)
+            end
+        end)
+    end
+end)
+
+local AutoChuaToggle = FarmSection:AddToggle("AutoFarmChua", { Title = "Auto Farm Ở Chùa", Default = false })
+AutoChuaToggle:OnChanged(function(Value) _G.AutoFarmChua = Value end)
+
+local AntiAFKToggle = FarmSection:AddToggle("AntiAFK", { Title = "Kích Hoạt Anti-AFK", Default = false })
+AntiAFKToggle:OnChanged(function(Value) _G.AntiAFK = Value end)
+
+LocalPlayer.Idled:Connect(function()
+    if _G.AntiAFK then
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+        Fluent:Notify({ Title = "Anti-AFK", Content = "Đã tự động tương tác chống văng game!", Duration = 3 })
+    end
+end)
+
+FarmSection:AddButton({
+    Title = "Admin (Infinite Yield)",
+    Description = "Bấm để chạy Infinite Yield FE",
+    Callback = function()
+        loadstring(game:HttpGet('https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/source'))()
+    end
+})
+
+-- ================= MỤC 3: FARM BOSS =================
+local BossSection = Tabs.FarmBoss:AddSection("Cấu hình & Tùy Chỉnh Farm Boss Linh Hoạt")
+
+BossSection:AddButton({
+    Title = "Dịch Chuyển Đến Boss (NPC2)",
+    Description = "Teleport tức thì đến vị trí Boss NPC2",
+    Callback = function()
+        local boss = GetBossNPC2()
+        if boss and boss:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+            LocalPlayer.Character.HumanoidRootPart.CFrame = boss.HumanoidRootPart.CFrame * CFrame.new(0, 2, 3)
+            Fluent:Notify({ Title = "Thành công", Content = "Đã dịch chuyển tới vị trí Boss!", Duration = 3 })
+        else
+            Fluent:Notify({ Title = "Lỗi", Content = "Không tìm thấy Boss NPC2!", Duration = 3 })
+        end
+    end
+})
+
+local circleAngle = 0
+
+local AutoBossToggle = BossSection:AddToggle("AutoFarmBossToggle", { Title = "Kích Hoạt Auto Farm Boss", Default = false })
+AutoBossToggle:OnChanged(function(Value)
+    _G.AutoFarmBoss = Value
+    
+    if not Value then
+        pcall(function()
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                LocalPlayer.Character.HumanoidRootPart.Velocity = Vector3.new(0, 0, 0)
+            end
+        end)
+        return
+    end
+
+    task.spawn(function()
+        while _G.AutoFarmBoss do
+            pcall(function()
+                if not _G.AutoFarmBoss then return end
+
+                local boss = GetBossNPC2()
+                if boss and boss:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    local bossHRP = boss.HumanoidRootPart
+                    local myHRP = LocalPlayer.Character.HumanoidRootPart
+                    myHRP.Velocity = Vector3.new(0, 0, 0)
+
+                    local distance = tonumber(_G.BossFarmDistance) or 12
+                    local height = tonumber(_G.BossFarmHeight) or 0
+                    local speed = tonumber(_G.BossFarmSpeed) or 15
+
+                    circleAngle = (circleAngle + speed) % 360
+                    local rad = math.rad(circleAngle)
+                    
+                    local targetPos = bossHRP.Position + Vector3.new(math.cos(rad) * distance, height, math.sin(rad) * distance)
+
+                    myHRP.CFrame = CFrame.new(targetPos, bossHRP.Position)
+
+                    if _G.AimBossCam then
+                        Workspace.CurrentCamera.CFrame = CFrame.new(Workspace.CurrentCamera.CFrame.Position, bossHRP.Position)
+                    end
+
+                    AutoAttack()
+                end
+            end)
+            task.wait(0.01)
+        end
+    end)
+end)
+
+BossSection:AddSlider("BossDistanceSlider", {
+    Title = "Khoảng Cách Đứng Đánh Boss",
+    Description = "Chỉnh độ xa/gần so với Boss (Studs)",
+    Default = 12, Min = 2, Max = 40, Rounding = 0,
+    Callback = function(Value) _G.BossFarmDistance = Value end
+})
+
+BossSection:AddSlider("BossHeightSlider", {
+    Title = "Độ Cao So Với Boss",
+    Description = "0 = Ngang tầm mắt, chỉnh cao hơn nếu muốn né đòn",
+    Default = 0, Min = -5, Max = 30, Rounding = 0,
+    Callback = function(Value) _G.BossFarmHeight = Value end
+})
+
+BossSection:AddSlider("BossSpeedSlider", {
+    Title = "Tốc Độ Di Chuyển Xoay Quanh Boss",
+    Description = "Tốc độ di chuyển né đòn",
+    Default = 15, Min = 1, Max = 50, Rounding = 0,
+    Callback = function(Value) _G.BossFarmSpeed = Value end
+})
+
+local HitboxToggle = BossSection:AddToggle("ExpandHitboxToggle", { Title = "Tự Động Mở Rộng Hitbox Boss", Default = true })
+HitboxToggle:OnChanged(function(Value) _G.ExpandBossHitbox = Value end)
+
+BossSection:AddSlider("HitboxSizeSlider", {
+    Title = "Kích Thước Hitbox Boss",
+    Description = "Mở rộng kích thước Boss để đánh trúng cực dễ",
+    Default = 25, Min = 5, Max = 60, Rounding = 0,
+    Callback = function(Value) _G.BossHitboxSize = Value end
+})
+
+local AutoLootBossToggle = BossSection:AddToggle("AutoLootBossToggle", { Title = "Auto Nhặt Đồ Loot Boss & Chest (Giữ E)", Default = false })
+AutoLootBossToggle:OnChanged(function(Value)
+    _G.AutoLootBossChest = Value
+    if Value then
+        task.spawn(function()
+            while _G.AutoLootBossChest do
+                pcall(function()
+                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                        local myPos = LocalPlayer.Character.HumanoidRootPart.Position
+                        for _, v in pairs(Workspace:GetDescendants()) do
+                            if v:IsA("ProximityPrompt") and v.Enabled then
+                                local promptPos = nil
+                                if v.Parent:IsA("BasePart") then promptPos = v.Parent.Position
+                                elseif v.Parent:IsA("Model") and v.Parent.PrimaryPart then promptPos = v.Parent.PrimaryPart.Position end
+                                
+                                if promptPos and (myPos - promptPos).Magnitude <= 30 then
+                                    fireproximityprompt(v)
+                                end
+                            end
+                        end
+                    end
+                end)
+                task.wait(0.1)
+            end
+        end)
+    end
+end)
+
+local AimBossToggle = BossSection:AddToggle("AimBossToggle", { Title = "Aim Hướng Đánh (Giữ Tự Do Cam)", Default = false })
+AimBossToggle:OnChanged(function(Value) _G.AimBossCam = Value end)
+
+local ShowBossHealthToggle = BossSection:AddToggle("ShowBossHealthToggle", { Title = "Hiện Máu Boss (UI Bảng Máu Xịn)", Default = false })
+ShowBossHealthToggle:OnChanged(function(Value) _G.ShowBossHealthUI = Value end)
+
+local SpinCamToggle = BossSection:AddToggle("SpinCamToggle", { Title = "Camera Xoay Xung Quanh Boss", Default = false })
+SpinCamToggle:OnChanged(function(Value) _G.SpinCameraBoss = Value end)
+
+-- ================= MỤC 4: FARM TIỀN =================
+local TienSection = Tabs.FarmTien:AddSection("Cấu hình & Chức năng Farm Tiền")
+
+TienSection:AddButton({
+    Title = "Lưu vị trí Farm Bánh Mì", Description = "Đứng gần ghế bánh mì rồi bấm để lưu vị trí",
+    Callback = function()
+        local pos = GetAndSaveChairPosition("FarmBanhMiPos")
+        if pos then Fluent:Notify({ Title = "Thành công", Content = "Đã lưu vị trí Farm Bánh Mì!", Duration = 3 })
+        else Fluent:Notify({ Title = "Lỗi", Content = "Không tìm thấy ghế gần bạn!", Duration = 3 }) end
+    end
+})
+
+TienSection:AddButton({
+    Title = "Lưu vị trí Farm Bệnh Viện", Description = "Đứng gần ghế bệnh viện rồi bấm để lưu vị trí",
+    Callback = function()
+        local pos = GetAndSaveChairPosition("FarmBenhVienPos")
+        if pos then Fluent:Notify({ Title = "Thành công", Content = "Đã lưu vị trí Farm Bệnh Viện!", Duration = 3 })
+        else Fluent:Notify({ Title = "Lỗi", Content = "Không tìm thấy ghế gần bạn!", Duration = 3 }) end
+    end
+})
+
+TienSection:AddButton({
+    Title = "Lưu vị trí Farm Cao Su", Description = "Đứng gần ghế cao su rồi bấm để lưu vị trí",
+    Callback = function()
+        local pos = GetAndSaveChairPosition("FarmCaoSuPos")
+        if pos then Fluent:Notify({ Title = "Thành công", Content = "Đã lưu vị trí Farm Cao Su!", Duration = 3 })
+        else Fluent:Notify({ Title = "Lỗi", Content = "Không tìm thấy ghế gần bạn!", Duration = 3 }) end
+    end
+})
+
+TienSection:AddButton({
+    Title = "Lưu vị trí Farm Chốt Công An", Description = "Đứng gần ghế chốt công an rồi bấm để lưu vị trí",
+    Callback = function()
+        local pos = GetAndSaveChairPosition("FarmChotCongAnPos")
+        if pos then Fluent:Notify({ Title = "Thành công", Content = "Đã lưu vị trí Farm Chốt Công An!", Duration = 3 })
+        else Fluent:Notify({ Title = "Lỗi", Content = "Không tìm thấy ghế gần bạn!", Duration = 3 }) end
+    end
+})
+
+local AutoBanhMiToggle = TienSection:AddToggle("AutoFarmBanhMi", { Title = "Auto Farm Bánh Mì", Default = false })
+AutoBanhMiToggle:OnChanged(function(Value)
+    _G.AutoFarmBanhMi = Value
+    if Value then
+        task.spawn(function()
+            while _G.AutoFarmBanhMi do
+                if _G.FarmBanhMiPos then FarmAtSavedPosition(_G.FarmBanhMiPos)
+                else
+                    Fluent:Notify({ Title = "Cảnh báo", Content = "Chưa có vị trí Bánh Mì đã lưu!", Duration = 3 })
+                    _G.AutoFarmBanhMi = false
+                    AutoBanhMiToggle:SetValue(false)
+                    break
+                end
+                task.wait(0.1)
+            end
+        end)
+    end
+end)
+
+local AutoBenhVienToggle = TienSection:AddToggle("AutoFarmBenhVien", { Title = "Auto Farm Bệnh Viện", Default = false })
+AutoBenhVienToggle:OnChanged(function(Value)
+    _G.AutoFarmBenhVien = Value
+    if Value then
+        task.spawn(function()
+            while _G.AutoFarmBenhVien do
+                if _G.FarmBenhVienPos then FarmAtSavedPosition(_G.FarmBenhVienPos)
+                else
+                    Fluent:Notify({ Title = "Cảnh báo", Content = "Chưa có vị trí Bệnh Viện đã lưu!", Duration = 3 })
+                    _G.AutoFarmBenhVien = false
+                    AutoBenhVienToggle:SetValue(false)
+                    break
+                end
+                task.wait(0.1)
+            end
+        end)
+    end
+end)
+
+local AutoCaoSuToggle = TienSection:AddToggle("AutoFarmCaoSu", { Title = "Auto Farm Cao Su", Default = false })
+AutoCaoSuToggle:OnChanged(function(Value)
+    _G.AutoFarmCaoSu = Value
+    if Value then
+        task.spawn(function()
+            while _G.AutoFarmCaoSu do
+                if _G.FarmCaoSuPos then FarmAtSavedPosition(_G.FarmCaoSuPos)
+                else
+                    Fluent:Notify({ Title = "Cảnh báo", Content = "Chưa có vị trí Cao Su đã lưu!", Duration = 3 })
+                    _G.AutoFarmCaoSu = false
+                    AutoCaoSuToggle:SetValue(false)
+                    break
+                end
+                task.wait(0.1)
+            end
+        end)
+    end
+end)
+
+local AutoChotCongAnToggle = TienSection:AddToggle("AutoFarmChotCongAn", { Title = "Auto Farm Chốt Công An", Default = false })
+AutoChotCongAnToggle:OnChanged(function(Value)
+    _G.AutoFarmChotCongAn = Value
+    if Value then
+        task.spawn(function()
+            while _G.AutoFarmChotCongAn do
+                if _G.FarmChotCongAnPos then FarmAtSavedPosition(_G.FarmChotCongAnPos)
+                else
+                    Fluent:Notify({ Title = "Cảnh báo", Content = "Chưa có vị trí Chốt Công An đã lưu!", Duration = 3 })
+                    _G.AutoFarmChotCongAn = false
+                    AutoChotCongAnToggle:SetValue(false)
+                    break
+                end
+                task.wait(0.1)
+            end
+        end)
+    end
+end)
+
+-- ================= MỤC 5: PVP COMBAT =================
+local PVPSection = Tabs.PVP:AddSection("Chức Năng PVP & Hỗ Trợ Chiến Đấu")
+
+local AimPlayerToggle = PVPSection:AddToggle("AimPlayerToggle", { Title = "Aim Nhân Vật", Default = false })
+AimPlayerToggle:OnChanged(function(Value)
+    _G.AimPlayer = Value
+    if Value then
+        task.spawn(function()
+            while _G.AimPlayer do
+                pcall(function()
+                    local target = GetClosestPlayer()
+                    if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                        local myHRP = LocalPlayer.Character.HumanoidRootPart
+                        local targetHRP = target.Character.HumanoidRootPart
+                        myHRP.CFrame = CFrame.new(myHRP.Position, Vector3.new(targetHRP.Position.X, myHRP.Position.Y, targetHRP.Position.Z))
+                    end
+                end)
+                task.wait(0.01)
+            end
+        end)
+    end
+end)
+
+local PVPAutoAttackToggle = PVPSection:AddToggle("PVPAutoAttackToggle", { Title = "Auto Attack", Default = false })
+PVPAutoAttackToggle:OnChanged(function(Value)
+    _G.PVPAutoAttack = Value
+    if Value then
+        task.spawn(function()
+            while _G.PVPAutoAttack do
+                AutoAttack()
+                task.wait(0.05)
+            end
+        end)
+    end
+end)
+
+PVPSection:AddInput("AttackToolInput", {
+    Title = "Tên Tool Vũ Khí Cần Attack",
+    Default = "",
+    Placeholder = "Nhập chính xác tên vũ khí...",
+    Numeric = false,
+    Finished = false,
+    Callback = function(Value)
+        _G.AttackToolName = Value
+    end
+})
+
+local AutoHealToggle = PVPSection:AddToggle("AutoHealToggle", { Title = "Auto Heal (Phím Tắt)", Default = false })
+AutoHealToggle:OnChanged(function(Value)
+    _G.AutoHeal = Value
+    if Value then
+        task.spawn(function()
+            local SlotKeys = {
+                [1] = Enum.KeyCode.One,
+                [2] = Enum.KeyCode.Two,
+                [3] = Enum.KeyCode.Three,
+                [4] = Enum.KeyCode.Four,
+                [5] = Enum.KeyCode.Five
+            }
+            while _G.AutoHeal do
+                pcall(function()
+                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+                        local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+                        local maxHealth = hum.MaxHealth
+                        local currentHealth = hum.Health
+                        local targetHealthPercent = tonumber(_G.HealHealthPercent) or 85
+
+                        if (currentHealth / maxHealth) * 100 < targetHealthPercent then
+                            local slotNum = tonumber(_G.HealSlot) or 1
+                            local targetKey = SlotKeys[slotNum]
+                            
+                            if targetKey then
+                                VirtualInputManager:SendKeyEvent(true, targetKey, false, game)
+                                task.wait(0.05)
+                                VirtualInputManager:SendKeyEvent(false, targetKey, false, game)
+                            end
+                        end
+                    end
+                end)
+                task.wait(0.45)
+            end
+        end)
+    end
+end)
+
+PVPSection:AddSlider("HealSlotSlider", {
+    Title = "Vị Trí Ô Băng Gạc (Nút 1 - 5)",
+    Description = "Chọn phím ô đồ chứa Băng Gạc",
+    Default = 1, Min = 1, Max = 5, Rounding = 0,
+    Callback = function(Value) _G.HealSlot = Value end
+})
+
+PVPSection:AddSlider("HealHealthPercentSlider", {
+    Title = "Mức Máu Cần Bơm (% Máu)",
+    Description = "Tự động bơm khi máu thấp hơn % đã chọn",
+    Default = 85, Min = 10, Max = 100, Rounding = 0,
+    Callback = function(Value) _G.HealHealthPercent = Value end
+})
+
+local AutoBuyToggle = PVPSection:AddToggle("AutoBuyBangGacToggle", { Title = "Auto Mua Băng Gạc", Default = false })
+AutoBuyToggle:OnChanged(function(Value)
+    _G.AutoBuyBangGac = Value
+    if Value then
+        task.spawn(function()
+            while _G.AutoBuyBangGac do
+                pcall(function()
+                    local count = tonumber(_G.BuyAmountBangGac) or 1
+                    for i = 1, count do
+                        for _, v in pairs(Workspace:GetDescendants()) do
+                            if v:IsA("ProximityPrompt") and (v.ObjectText:find("băng gạc") or v.ActionText:find("băng gạc") or v.Parent.Name:find("băng gạc") or v.ObjectText:find("Băng Gạc") or v.ActionText:find("Băng Gạc") or v.Parent.Name:find("Băng Gạc")) then
+                                fireproximityprompt(v)
+                            end
+                        end
+                        task.wait(0.05)
+                    end
+                end)
+                task.wait(1)
+            end
+        end)
+    end
+end)
+
+PVPSection:AddSlider("BuyAmountSlider", {
+    Title = "Số Lượng Cần Mua",
+    Description = "Chỉnh số lượng băng gạc mua mỗi đợt",
+    Default = 1, Min = 1, Max = 100, Rounding = 0,
+    Callback = function(Value) _G.BuyAmountBangGac = Value end
+})
+
+local HitboxPlayerToggle = PVPSection:AddToggle("HitboxPlayerToggle", { Title = "Hitbox Player", Default = false })
+HitboxPlayerToggle:OnChanged(function(Value) _G.PlayerHitbox = Value end)
+
+PVPSection:AddSlider("HitboxPlayerSizeSlider", {
+    Title = "Chỉnh Size Hitbox",
+    Description = "Kích thước Hitbox nhân vật khác",
+    Default = 50, Min = 2, Max = 200, Rounding = 0,
+    Callback = function(Value) _G.PlayerHitboxSize = Value end
+})
+
+PVPSection:AddSlider("HitboxTransparencySlider", {
+    Title = "Độ Tàng Hình Hitbox",
+    Description = "0 = Hiện rõ, 1 = Tàng hình hoàn toàn",
+    Default = 0.5, Min = 0, Max = 1, Rounding = 2,
+    Callback = function(Value) _G.PlayerHitboxTransparency = Value end
+})
+
+local ESPPlayerHealthToggle = PVPSection:AddToggle("ESPPlayerHealthToggle", { Title = "Hiện Máu Trên Đầu", Default = false })
+ESPPlayerHealthToggle:OnChanged(function(Value)
+    _G.ESPPlayerHealth = Value
+    if not Value then
+        for _, plr in pairs(Players:GetPlayers()) do
+            if plr.Character and plr.Character:FindFirstChild("Head") and plr.Character.Head:FindFirstChild("PlayerESP_TKZ") then
+                plr.Character.Head.PlayerESP_TKZ:Destroy()
+            end
+        end
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(0.2)
+        if _G.ESPPlayerHealth then
+            pcall(function()
+                for _, plr in pairs(Players:GetPlayers()) do
+                    if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("Head") and plr.Character:FindFirstChildOfClass("Humanoid") then
+                        local head = plr.Character.Head
+                        local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+                        
+                        local bb = head:FindFirstChild("PlayerESP_TKZ")
+                        if not bb then
+                            bb = Instance.new("BillboardGui")
+                            bb.Name = "PlayerESP_TKZ"
+                            bb.Size = UDim2.new(0, 140, 0, 45)
+                            bb.StudsOffset = Vector3.new(0, 3, 0)
+                            bb.AlwaysOnTop = true
+                            bb.Parent = head
+
+                            local bgFrame = Instance.new("Frame", bb)
+                            bgFrame.Size = UDim2.new(1, 0, 1, 0)
+                            bgFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+                            bgFrame.BackgroundTransparency = 0.2
+                            bgFrame.BorderSizePixel = 0
+
+                            local corner = Instance.new("UICorner", bgFrame)
+                            corner.CornerRadius = UDim.new(0, 6)
+
+                            local nameLbl = Instance.new("TextLabel", bgFrame)
+                            nameLbl.Name = "NameLabel"
+                            nameLbl.Size = UDim2.new(1, 0, 0, 20)
+                            nameLbl.Position = UDim2.new(0, 0, 0, 2)
+                            nameLbl.BackgroundTransparency = 1
+                            nameLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+                            nameLbl.Font = Enum.Font.GothamBold
+                            nameLbl.TextSize = 11
+
+                            local hpBarBg = Instance.new("Frame", bgFrame)
+                            hpBarBg.Size = UDim2.new(0.9, 0, 0, 10)
+                            hpBarBg.Position = UDim2.new(0.05, 0, 0, 24)
+                            hpBarBg.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+                            hpBarBg.BorderSizePixel = 0
+
+                            local hpFill = Instance.new("Frame", hpBarBg)
+                            hpFill.Name = "Fill"
+                            hpFill.Size = UDim2.new(1, 0, 1, 0)
+                            hpFill.BackgroundColor3 = Color3.fromRGB(0, 255, 120)
+                            hpFill.BorderSizePixel = 0
+
+                            local hpText = Instance.new("TextLabel", hpBarBg)
+                            hpText.Name = "HPText"
+                            hpText.Size = UDim2.new(1, 0, 1, 0)
+                            hpText.BackgroundTransparency = 1
+                            hpText.TextColor3 = Color3.fromRGB(255, 255, 255)
+                            hpText.Font = Enum.Font.GothamMedium
+                            hpText.TextSize = 9
+                        end
+
+                        if bb and bb:FindFirstChild("Frame") then
+                            local frame = bb.Frame
+                            frame.NameLabel.Text = plr.Name
+                            local pct = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
+                            frame.Frame.Fill.Size = UDim2.new(pct, 0, 1, 0)
+                            frame.Frame.HPText.Text = string.format("%d / %d", math.floor(hum.Health), math.floor(hum.MaxHealth))
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+local HighSpeedSpinToggle = PVPSection:AddToggle("HighSpeedSpinToggle", { Title = "Spin Tốc Độ Cao", Default = false })
+HighSpeedSpinToggle:OnChanged(function(Value)
+    _G.HighSpeedSpin = Value
+    if Value then
+        task.spawn(function()
+            local spinAngle = 0
+            while _G.HighSpeedSpin do
+                pcall(function()
+                    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                        spinAngle = (spinAngle + 50) % 360
+                        LocalPlayer.Character.HumanoidRootPart.CFrame = LocalPlayer.Character.HumanoidRootPart.CFrame * CFrame.Angles(0, math.rad(50), 0)
+                    end
+                end)
+                task.wait(0.01)
+            end
+        end)
+    end
+end)
+
+local SuperSpeedToggle = PVPSection:AddToggle("SuperSpeedToggle", { Title = "Siêu Tốc Độ Chạy", Default = false })
+SuperSpeedToggle:OnChanged(function(Value)
+    _G.SuperSpeed = Value
+    if not Value and LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+        LocalPlayer.Character:FindFirstChildOfClass("Humanoid").WalkSpeed = 16
+    end
+end)
+
+PVPSection:AddSlider("SuperSpeedSlider", {
+    Title = "Tốc Độ Chạy",
+    Description = "Chỉnh tốc độ di chuyển cực nhanh",
+    Default = 50, Min = 16, Max = 300, Rounding = 0,
+    Callback = function(Value) _G.SuperSpeedValue = Value end
+})
+
+local SuperJumpToggle = PVPSection:AddToggle("SuperJumpToggle", { Title = "Siêu Nhảy Cao", Default = false })
+SuperJumpToggle:OnChanged(function(Value)
+    _G.SuperJump = Value
+    if not Value and LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid") then
+        LocalPlayer.Character:FindFirstChildOfClass("Humanoid").JumpPower = 50
+    end
+end)
+
+PVPSection:AddSlider("SuperJumpSlider", {
+    Title = "Độ Cao Nhảy",
+    Description = "Chỉnh lực nhảy cực cao",
+    Default = 100, Min = 50, Max = 500, Rounding = 0,
+    Callback = function(Value) _G.SuperJumpValue = Value end
+})
+
+-- ================= MỤC 6: FIX LAG =================
+local FixLagSection = Tabs.FixLag:AddSection("Tối Ưu Hóa FPS & Đồ Họa")
+
+-- Hàm phụ trợ giảm đồ họa theo phần trăm
+local function ReduceGraphicsPercent(percent)
+    pcall(function()
+        local allParts = Workspace:GetDescendants()
+        local totalCount = #allParts
+        local targetCount = math.floor(totalCount * (percent / 100))
+        
+        for i = 1, targetCount do
+            local v = allParts[i]
+            if v and v:IsA("BasePart") then
+                v.Material = Enum.Material.SmoothPlastic
+                v.Reflectance = 0
+            end
+        end
+        
+        Fluent:Notify({
+            Title = "Fix Lag",
+            Content = "Đã xóa " .. tostring(percent) .. "% Đồ Họa Gốc thành công!",
+            Duration = 3
+        })
+    end)
+end
+
+-- Chức năng: Bật FPS Boost
+FixLagSection:AddButton({
+    Title = "Bật FPS Boost",
+    Description = "Tối ưu hóa Lighting, Shadow và hiệu ứng hạt",
+    Callback = function()
+        pcall(function()
+            Lighting.GlobalShadows = false
+            Lighting.FogEnd = 9e9
+            Lighting.Brightness = 1
+            if setfpscap then setfpscap(120) end
+            
+            for _, v in pairs(Workspace:GetDescendants()) do
+                if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") or v:IsA("Sparkles") then
+                    v.Enabled = false
+                end
+            end
+            
+            Fluent:Notify({ Title = "FPS Boost", Content = "Đã kích hoạt tối ưu hóa FPS Boost!", Duration = 3 })
+        end)
+    end
+})
+
+-- Chức năng: Xóa 20% Đồ Họa Gốc
+FixLagSection:AddButton({
+    Title = "Xóa 20% Đồ Họa Gốc",
+    Description = "Giảm nhẹ đồ họa bản đồ",
+    Callback = function() ReduceGraphicsPercent(20) end
+})
+
+-- Chức năng: Xóa 40% Đồ Họa Gốc
+FixLagSection:AddButton({
+    Title = "Xóa 40% Đồ Họa Gốc",
+    Description = "Giảm đồ họa mức trung bình",
+    Callback = function() ReduceGraphicsPercent(40) end
+})
+
+-- Chức năng: Xóa 60% Đồ Họa Gốc
+FixLagSection:AddButton({
+    Title = "Xóa 60% Đồ Họa Gốc",
+    Description = "Giảm mạnh đồ họa bản đồ",
+    Callback = function() ReduceGraphicsPercent(60) end
+})
+
+-- Chức năng: Xóa 100% Đồ Họa Gốc
+FixLagSection:AddButton({
+    Title = "Xóa 100% Đồ Họa Gốc",
+    Description = "Làm phẳng toàn bộ bản đồ",
+    Callback = function() ReduceGraphicsPercent(100) end
+})
+
+-- Chức năng: Xóa Sạch Texture Và Hiệu Ứng
+FixLagSection:AddButton({
+    Title = "Xóa Sạch Texture Và Hiệu Ứng",
+    Description = "Xóa toàn bộ decal, texture, bóng và hiệu ứng ánh sáng",
+    Callback = function()
+        pcall(function()
+            for _, v in pairs(game:GetDescendants()) do
+                if v:IsA("Texture") or v:IsA("Decal") then
+                    v:Destroy()
+                elseif v:IsA("BasePart") then
+                    v.Material = Enum.Material.SmoothPlastic
+                    v.Reflectance = 0
+                elseif v:IsA("PostEffect") or v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("SunRaysEffect") then
+                    v.Enabled = false
+                elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") or v:IsA("Sparkles") then
+                    v.Enabled = false
+                end
+            end
+            Lighting.GlobalShadows = false
+            Fluent:Notify({ Title = "Thành công", Content = "Đã xóa sạch Texture và Hiệu ứng!", Duration = 3 })
+        end)
+    end
+})
+
+-- ================= MỤC 7: SETTING =================
+local SettingSection = Tabs.Settings:AddSection("Tùy Chỉnh Giao Diện Menu")
+
+-- Thanh chỉnh màu menu (Color Picker)
+local ThemeColorPicker = SettingSection:AddColorpicker("ThemeColorPicker", {
+    Title = "Chỉnh Màu Menu",
+    Description = "Thay đổi tông màu chủ đạo của UI Menu",
+    Default = Color3.fromRGB(0, 140, 255)
+})
+
+ThemeColorPicker:OnChanged(function(Value)
+    pcall(function()
+        if Window then
+            -- Cập nhật trực tiếp màu Accent của Fluent
+            Window:SetAccentColor(Value)
+        end
+    end)
+end)
+
+Window:SelectTab(1)
+
+Fluent:Notify({
+    Title = "Tuất CDVN",
+    Content = "menu dành cho game tuatcdvn nhé ae!",
+    Duration = 5
+})
